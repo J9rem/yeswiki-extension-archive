@@ -20,7 +20,7 @@ use YesWiki\Wiki;
 class ArchiveCommand extends Command
 {
     // the name of the command (the part after "bin/console")
-    protected static $defaultName = 'core:archive';
+    protected static $defaultName = 'archive:archive';
 
     protected $archiveService;
     protected $wiki;

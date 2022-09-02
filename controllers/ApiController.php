@@ -64,4 +64,12 @@ class ApiController extends YesWikiController
     {
         return $this->getService(ArchiveController::class)->manageArchiveAction();
     }
+
+    /**
+     * @Route("/api/archives/stop/{id}", methods={"GET"}, options={"acl":{"public", "@admins"}},priority=4)
+     */
+    public function stopArchive($id)
+    {
+        return $this->getService(ArchiveController::class)->stopArchive($id);
+    }
 }

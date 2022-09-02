@@ -432,7 +432,10 @@ class ArchiveService
         string $inputFile = "",
         string $outputFile = ""
     ) {
-        $pathToArchive = dirname(__FILE__, 3); // includes/services/../../
+        if (!file_exists('index.php') || !file_exists('wakka.config.php') || !file_exists('composer.json') || !file_exists('composer.lock')){
+            throw new Exception("Can only be started from main directory");
+        }
+        $pathToArchive = getcwd();
         $pathToArchive = preg_replace("/(\/|\\\\)$/", "", $pathToArchive);
         $dirs = [$pathToArchive];
         $dirnamePathLen = strlen($pathToArchive) ;

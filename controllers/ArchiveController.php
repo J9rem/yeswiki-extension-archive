@@ -119,12 +119,7 @@ class ArchiveController extends YesWikiController
                         Response::HTTP_BAD_REQUEST
                     );
                 }
-                $uid = htmlspecialchars($_POST['uid']);
-                $result = $this->archiveService->stopArchive($uid);
-                return new ApiResponse(
-                    [],
-                    $result ? Response::HTTP_OK : Response::HTTP_BAD_REQUEST
-                );
+                return $this->stopArchive($_POST['uid']);
                 break;
             case 'restore':
                 if (empty($id)) {
@@ -155,6 +150,22 @@ class ArchiveController extends YesWikiController
                 );
                 break;
         }
+    }
+
+    public function stopArchive(?string $id = null)
+    {
+        if (empty($id)) {
+            return new ApiResponse(
+                ['error' => "\$id should be set and be an string for action 'stopArchive'"],
+                Response::HTTP_BAD_REQUEST
+            );
+        }
+        $uid = htmlspecialchars($id);
+        $result = $this->archiveService->stopArchive($uid);
+        return new ApiResponse(
+            [],
+            $result ? Response::HTTP_OK : Response::HTTP_BAD_REQUEST
+        );
     }
 
     public function getArchiveStatus(string $uid)

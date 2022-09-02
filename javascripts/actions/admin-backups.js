@@ -265,12 +265,8 @@ let appParams = {
             this.stoppingArchive = true;
             let archiveApp = this;
             $.ajax({
-                method: "POST",
-                url: wiki.url(`api/archives`),
-                data: {
-                    action: 'stopArchive',
-                    uid: archiveApp.currentArchiveUid
-                },
+                method: "GET",
+                url: wiki.url(`api/archives/stop/${archiveApp.currentArchiveUid}`),
                 success: function(data){
                     archiveApp.archiveMessage = _t('ADMIN_BACKUPS_STOPPING_ARCHIVE');
                     archiveApp.archiveMessageClass = {alert:true,['alert-warning']:true};
