@@ -1,0 +1,30 @@
+# This file is part of the YesWiki Extension archive.
+# Authors : see README.md file that was distributed with this source code.
+# For the full copyright and license information, please view the LICENSE
+# file that was distributed with this source code.
+parameters:
+  archive: 
+    anonymous: 
+      mysql_host: ''
+      mysql_database: ''
+      mysql_user: ''
+      mysql_password: ''
+      contact_smtp_host: ''
+      contact_smtp_user: ''
+      contact_smtp_pass: ''
+      api_allowed_keys: []
+  archive_editable_config_params:
+    - archive:
+      - privatePath
+services:
+  _defaults:
+    autowire: true
+    public: true
+
+  YesWiki\Archive\Service\:
+    resource: 'services/*'
+  YesWiki\Archive\Controller\:
+    resource: 'controllers/*'
+
+  YesWiki\Archive\Controller\SecurityController:
+    decorates: YesWiki\Security\Controller\SecurityController
