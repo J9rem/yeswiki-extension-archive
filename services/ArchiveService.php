@@ -181,6 +181,9 @@ class ArchiveService
 
             $this->writeOutput($output, "=== Creating zip archive ===", true, $outputFile);
             $this->createZip($location, $dataFiles, $output, $sqlContent, $onlyDb, $anonymousParams, $inputFile, $outputFile);
+            if (!file_exists($location)) {
+                throw new StopArchiveException("Stop archive : not saved !");
+            }
 
             $this->writeOutput($output, "Archive \"$location\" successfully created !", true, $outputFile);
             $this->writeOutput($output, "END", true, $outputFile);
@@ -399,7 +402,7 @@ class ArchiveService
      * @param string $inputFile
      * @return bool
      */
-    protected function checkIfNeedStop(string $inputFile = ""):bool
+    protected function checkIfNeedStop(string $inputFile = ""): bool
     {
         if (empty($inputFile) || !is_file($inputFile)) {
             return false;
@@ -432,7 +435,7 @@ class ArchiveService
         string $inputFile = "",
         string $outputFile = ""
     ) {
-        if (!file_exists('index.php') || !file_exists('wakka.config.php') || !file_exists('composer.json') || !file_exists('composer.lock')){
+        if (!file_exists('index.php') || !file_exists('wakka.config.php') || !file_exists('composer.json') || !file_exists('composer.lock')) {
             throw new Exception("Can only be started from main directory");
         }
         $pathToArchive = getcwd();
@@ -440,7 +443,7 @@ class ArchiveService
         $dirs = [$pathToArchive];
         $dirnamePathLen = strlen($pathToArchive) ;
         // open file
-        $zip = new ZipArchive;
+        $zip = new ZipArchive();
         $resource = $zip->open($zipPath, ZipArchive::CREATE |  ZipArchive::OVERWRITE);
         if ($resource === true) {
             if (!$onlyDb) {
@@ -507,6 +510,19 @@ class ArchiveService
                 );
             }
             $this->writeOutput($output, "Generating zip file", true, $outputFile);
+            // register cancel callback if available
+            if (method_exists($zip, 'registerCancelCallback')) {
+                $zip->registerCancelCallback(function () use ($inputFile) {
+                    // 0 will continue process
+                    return ($this->checkIfNeedStop($inputFile)) ? -1 : 0;
+                });
+            }
+            // register progress callback if available
+            if (method_exists($zip, 'registerProgressCallback')) {
+                $zip->registerProgressCallback(0.1, function ($r) use (&$output, $outputFile) {
+                    $this->writeOutput($output, "Zip file creation : ".strval(round($r*100, 0))." %", true, $outputFile);
+                });
+            }
             $zip->close();
         }
     }
@@ -822,7 +838,7 @@ class ArchiveService
                 "{$tablePrefix}referrers", // tables
             ], // args
             "", // subfolder
-            ('\\' === DIRECTORY_SEPARATOR ? ["c:\\xampp\\mysql\\bin\\"]: []), // extraDirsWhereSearch
+            ('\\' === DIRECTORY_SEPARATOR ? ["c:\\xampp\\mysql\\bin\\"] : []), // extraDirsWhereSearch
             60 // timeoutInSec
         );
 

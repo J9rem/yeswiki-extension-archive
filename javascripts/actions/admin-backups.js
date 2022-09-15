@@ -270,7 +270,6 @@ let appParams = {
                 success: function(data){
                     archiveApp.archiveMessage = _t('ADMIN_BACKUPS_STOPPING_ARCHIVE');
                     archiveApp.archiveMessageClass = {alert:true,['alert-warning']:true};
-                    setTimeout(archiveApp.updateStoppingStatus, 1000);
                 },
                 error: function(xhr,status,error){
                     archiveApp.archiveMessage = _t('ADMIN_BACKUPS_STOP_BACKUP_ERROR');
@@ -279,7 +278,7 @@ let appParams = {
                 }
             });
         },
-        updateStoppingStatus: function(){
+        updateStatus: function(){
             if (this.currentArchiveUid.length > 0){
                 let archiveApp= this;
                 $.ajax({
@@ -288,6 +287,9 @@ let appParams = {
                     success: function(data){
                         if (data.stopped){
                             archiveApp.endUpdatingStatus(_t('ADMIN_BACKUPS_UID_STATUS_STOP'),'success');
+                        } else if (!data.started){
+                            archiveApp.endUpdatingStatus(_t('ADMIN_BACKUPS_UID_STATUS_NOT_FOUND'),'warning');
+                            setTimeout(archiveApp.loadArchives, 3000);
                         } else if (data.finished){
                             archiveApp.endUpdatingStatus(_t('ADMIN_BACKUPS_UID_STATUS_FINISHED'),'success');
                         } else if (!data.running) {
@@ -295,34 +297,8 @@ let appParams = {
                         } else if (archiveApp.stoppingArchive) {
                             archiveApp.archiveMessage = _t('ADMIN_BACKUPS_STOPPING_ARCHIVE');
                             archiveApp.archiveMessage += "<pre>"+data.output.split("\n").slice(-5).join("<br>")+"</pre>";
-                            setTimeout(archiveApp.updateStoppingStatus, 1000);
-                        }
-                    },
-                    error: function(xhr,status,error){
-                        archiveApp.stoppingArchive = false;
-                        archiveApp.endUpdatingStatus(_t('ADMIN_BACKUPS_UPDATE_UID_STATUS_ERROR'),'danger');
-                        setTimeout(archiveApp.loadArchives, 3000);
-                    }
-                });
-            } else {
-                this.endUpdatingStatus();
-            }
-        },
-        updateStatus: function(){
-            if (this.currentArchiveUid.length > 0){
-                let archiveApp= this;
-                $.ajax({
-                    method: "GET",
-                    url: wiki.url(`api/archives/uidstatus/${archiveApp.currentArchiveUid}`),
-                    success: function(data){
-                        if (!data.started){
-                            archiveApp.endUpdatingStatus(_t('ADMIN_BACKUPS_UID_STATUS_NOT_FOUND'),'warning');
-                            setTimeout(archiveApp.loadArchives, 3000);
-                        } else if (data.finished){
-                            archiveApp.endUpdatingStatus(_t('ADMIN_BACKUPS_UID_STATUS_FINISHED'),'success');
-                        } else if (!data.running) {
-                            archiveApp.endUpdatingStatus(_t('ADMIN_BACKUPS_UID_STATUS_NOT_FINISHED'),'danger');
-                        } else if (!archiveApp.stoppingArchive) {
+                            setTimeout(archiveApp.updateStatus, 1000);
+                        } else {
                             archiveApp.archiveMessage = _t('ADMIN_BACKUPS_UID_STATUS_RUNNING');
                             archiveApp.archiveMessage += "<pre>"+data.output.split("\n").slice(-5).join("<br>")+"</pre>";
                             archiveApp.archiveMessageClass = {alert:true,['alert-secondary-2']:true};
