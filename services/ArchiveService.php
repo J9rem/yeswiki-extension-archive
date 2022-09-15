@@ -166,7 +166,7 @@ class ArchiveService
         if ($this->securityController->isWikiHibernated()) {
             throw new Exception(_t('WIKI_IN_HIBERNATION'));
         }
-        
+
         try {
             // set wiki status
             $this->setWikiStatus();
@@ -201,6 +201,46 @@ class ArchiveService
         $this->cleanOldestFiles();
         return $location;
     }
+
+
+    /**
+     * retrieve the current status to archive
+     * @return array ['canArchive' => bool,'archiving' => bool, 'hibernated' => bool, 'privatePathWritable' => true]
+     */
+    public function getArchivingStatus(): array
+    {
+        $canArchive = true;
+        $archiving = false;
+        $hibernated = false;
+        $privatePathWritable = true;
+        if ($this->securityController->isWikiHibernated()) {
+            $canArchive = false;
+            switch ($this->params->get('wiki_status')) {
+                case 'archiving':
+                    $archiving = true;
+                    break;
+                case 'hibernate':
+                    $hibernated = true;
+                    break;
+
+                default:
+                    break;
+            }
+        }
+        try {
+            $privatePath = $this->getPrivateFolder();
+        } catch (Exception $th) {
+            $privatePathWritable = false;
+            $canArchive = false;
+            $privatePath = "";
+        }
+        if (!empty($privatePath) && !is_writable($privatePath)) {
+            $privatePathWritable = false;
+            $canArchive = false;
+        }
+        return compact(['canArchive','archiving','hibernated','privatePathWritable']);
+    }
+
 
     /**
      * start archive async via CLI
@@ -390,7 +430,7 @@ class ArchiveService
         if (!isset($info[$uid]) ||
             empty($info[$uid]['input']) ||
             !is_file($info[$uid]['input'])
-            ) {
+        ) {
             return false;
         }
         file_put_contents($info[$uid]['input'], "STOP");
@@ -498,12 +538,12 @@ class ArchiveService
                     $sqlContent
                 );
                 $this->writeOutput($output, "Adding .htaccess file in folder ".self::PRIVATE_FOLDER_NAME_IN_ZIP, true, $outputFile);
-                
+
                 $zip->addFromString(
                     self::PRIVATE_FOLDER_NAME_IN_ZIP."/.htaccess",
                     "DENY FROM ALL\n"
                 );
-                
+
                 $zip->addFromString(
                     self::PRIVATE_FOLDER_NAME_IN_ZIP."/README.md",
                     self::PRIVATE_FOLDER_README_DEFAULT_CONTENT
@@ -856,7 +896,7 @@ class ArchiveService
         }
         return $sqlContent;
     }
-    
+
     /**
      * assert param is a not empty string
      * @param string $name
@@ -987,7 +1027,7 @@ class ArchiveService
                 foreach ($indexesToRemove as $index) {
                     $archivesToDelete[] = $archives[$index]['filename'];
                 }
-    
+
                 return $archivesToDelete;
             }
         }
@@ -1007,7 +1047,7 @@ class ArchiveService
                 ->setDate($archive['year'], $archive['month'], $archive['day'])
                 ->setTime($archive['hours'], $archive['minutes'], $archive['seconds'], 0);
             if ($fileDateTime->diff($nowMinusXDays)->invert ==0 // current file date is before - x days
-                ) {
+            ) {
                 $indexes[] = $key;
             }
         }
@@ -1033,7 +1073,7 @@ class ArchiveService
         return (empty($content) || !is_array($content)) ? [] : $content;
     }
 
-    
+
     /**
      * set content to info.json file from privatePath
      * @param mixed $content

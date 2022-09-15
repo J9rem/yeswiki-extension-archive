@@ -19,7 +19,6 @@ use YesWiki\Core\YesWikiController;
 
 class ApiController extends YesWikiController
 {
-   
     /**
      * @Route("/api/archives/{id}", methods={"GET"}, options={"acl":{"public", "@admins"}},priority=3)
      */
@@ -27,13 +26,24 @@ class ApiController extends YesWikiController
     {
         return $this->getService(ArchiveController::class)->getArchive($id);
     }
-    
+
     /**
      * @Route("/api/archives/uidstatus/{uid}", methods={"GET"}, options={"acl":{"public", "@admins"}},priority=3)
      */
     public function getArchiveStatus($uid)
     {
         return $this->getService(ArchiveController::class)->getArchiveStatus($uid);
+    }
+
+    /**
+     * @Route("/api/archives/archivingStatus/", methods={"GET"}, options={"acl":{"public", "@admins"}},priority=3)
+     */
+    public function getArchivingStatus()
+    {
+        return new ApiResponse(
+            $this->getService(ArchiveService::class)->getArchivingStatus(),
+            Response::HTTP_OK
+        );
     }
 
     /**
