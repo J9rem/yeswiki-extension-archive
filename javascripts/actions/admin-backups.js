@@ -199,6 +199,7 @@ let appParams = {
             $.ajax({
                 method: "GET",
                 url: wiki.url(`api/archives/archivingStatus/`),
+                cache: false,
                 success: function(data){
                     if (typeof data != "object" || !data.hasOwnProperty('canArchive')){
                         archiveApp.endStartingUpdateError();
@@ -299,6 +300,7 @@ let appParams = {
             $.ajax({
                 method: "GET",
                 url: wiki.url(`api/archives/stop/${archiveApp.currentArchiveUid}`),
+                cache: false,
                 success: function(data){
                     archiveApp.archiveMessage = _t('ADMIN_BACKUPS_STOPPING_ARCHIVE');
                     archiveApp.archiveMessageClass = {alert:true,['alert-warning']:true};
@@ -316,6 +318,7 @@ let appParams = {
                 $.ajax({
                     method: "GET",
                     url: wiki.url(`api/archives/uidstatus/${archiveApp.currentArchiveUid}`),
+                    cache: false,
                     success: function(data){
                         if (data.stopped){
                             archiveApp.endUpdatingStatus(_t('ADMIN_BACKUPS_UID_STATUS_STOP'),'success');

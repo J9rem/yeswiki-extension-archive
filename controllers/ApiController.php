@@ -47,6 +47,18 @@ class ApiController extends YesWikiController
     }
 
     /**
+     * @Route("/api/archives/forcedUpdateToken/", methods={"GET"}, options={"acl":{"public", "@admins"}},priority=3)
+     */
+    public function getForcedUpdateToken()
+    {
+        $token = $this->getService(ArchiveService::class)->getForcedUpdateToken();
+        return new ApiResponse(
+            ['token'=>$token],
+            empty($token) ? Response::HTTP_INTERNAL_SERVER_ERROR : Response::HTTP_OK
+        );
+    }
+
+    /**
      * @Route("/api/archives/", methods={"GET"}, options={"acl":{"public", "@admins"}},priority=3)
      * @Route("/api/archives", methods={"GET"}, options={"acl":{"public", "@admins"}},priority=3)
      */

@@ -13,6 +13,7 @@ parameters:
       contact_smtp_user: ''
       contact_smtp_pass: ''
       api_allowed_keys: []
+    authorize_bypass_preupdate_backup: false
   archive_editable_config_params:
     - archive:
       - privatePath

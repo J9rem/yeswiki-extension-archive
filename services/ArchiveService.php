@@ -202,6 +202,29 @@ class ArchiveService
         return $location;
     }
 
+    /**
+     * check if a recent and valided backup is present
+     * @param  string $token
+     * @return bool
+     */
+    public function hasValidatedBackup(string $token): bool
+    {
+        $privatePath = $this->getPrivateFolder();
+        $info = $this->getInfoFromFile($privatePath);
+        $result = (
+            !empty($token) &&
+            $this->getArchivingStatus()['canArchive'] &&
+            !empty($info[$token]) &&
+            isset($info[$token]['isForcedUpdate']) &&
+            $info[$token]['isForcedUpdate'] === true
+        );
+        foreach ($info as $uid => $data) {
+            if (isset($data['isForcedUpdate']) && $data['isForcedUpdate'] === true) {
+                $this->cleanUID($uid, $privatePath);
+            }
+        }
+        return $result;
+    }
 
     /**
      * retrieve the current status to archive
@@ -239,6 +262,28 @@ class ArchiveService
             $canArchive = false;
         }
         return compact(['canArchive','archiving','hibernated','privatePathWritable']);
+    }
+
+    /**
+     * get a token to force update
+     * @return string $token
+     */
+    public function getForcedUpdateToken(): string
+    {
+        if (!$this->getArchivingStatus()['canArchive']) {
+            return "";
+        }
+        $privatePath = $this->getPrivateFolder();
+        $uidData = $this->getUID($privatePath);
+        $info = $this->getInfoFromFile($privatePath);
+        $uid = $uidData['uid'] ?? "";
+        if (empty($uid) || !isset($info[$uid])) {
+            return "";
+        }
+
+        $info[$uid]['isForcedUpdate'] = true;
+        $this->setInfoToFile($info, $privatePath);
+        return $uid;
     }
 
 

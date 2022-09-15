@@ -49,5 +49,7 @@ return [
         " - Vérifier la validité du paramètre 'archive[privatePath]', dans la page 'GererConfig' (rubrique 'Archivage')\n".
         " - si ce paramètre est vide, le remplir avec un chemin non accessible sur le internet\n".
         " - Vérifier que le dossier est bien accessible pour 'php' (si 'archive[privatePath]' est vide, c'est le dossier '/tmp' qui est utilisé)",
+    "ADMIN_BACKUPS_FORCED_UPDATE_NOT_POSSIBLE" => "Mise à jour forcée impossible",
+    "ADMIN_BACKUPS_UID_STATUS_FINISHED_THEN_UPDATING" => "Mise à jour lancée (veuillez patienter)",
 
 ];

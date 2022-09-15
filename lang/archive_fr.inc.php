@@ -38,4 +38,9 @@ return [
 
     // templates/autoupdate/core.twig
     'ARCHIVE_MANAGE_BACKUPS' => 'Gérer les sauvegardes',
+
+    // templates/preupdate-backups.twig
+    'ADMIN_BACKUPS_CREATING' => 'Création d\'une sauvegarde',
+    'ADMIN_BACKUPS_FORCE_UPDATE' => 'Forcer une mise à jour sans sauvegarde',
+    'ADMIN_BACKUPS_BY_PASS' => 'Mettre à jour sans sauvegarde',
 ];
