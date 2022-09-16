@@ -52,7 +52,7 @@ return [
     "ADMIN_BACKUPS_FORCED_UPDATE_NOT_POSSIBLE" => "Mise à jour forcée impossible",
     "ADMIN_BACKUPS_UID_STATUS_FINISHED_THEN_UPDATING" => "Mise à jour lancée (veuillez patienter)",
     "ADMIN_BACKUPS_START_BACKUP_CANNOT_EXEC" => "Lancement de la sauvegarde impossible \n" .
-    "Car il n'est pas possible de lancer dss commandes console sur le serveur.\n".
+    "Car il n'est pas possible de lancer des commandes console sur le serveur.\n".
     " - Vérifier que les commandes 'exec', 'proc_open', 'proc_terminate' ... sont autorisées pour php",
 
 ];
