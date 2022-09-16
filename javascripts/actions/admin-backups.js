@@ -216,7 +216,11 @@ let appParams = {
                     } else if (data.hasOwnProperty('privatePathWritable') && !data.privatePathWritable) {
                         archiveApp.endStartingUpdateError(_t('ADMIN_BACKUPS_START_BACKUP_PATH_NOT_WRITABLE').replace(/\n/g,'<br>'));
                         return ;
+                    } else if (data.hasOwnProperty('canExec') && !data.canExec) {
+                        archiveApp.endStartingUpdateError(_t('ADMIN_BACKUPS_START_BACKUP_CANNOT_EXEC').replace(/\n/g,'<br>'));
+                        return ;
                     }
+                    archiveApp.endStartingUpdateError();
                 },
                 error: function(){
                     archiveApp.endStartingUpdateError();
@@ -273,7 +277,7 @@ let appParams = {
                     if (data.files.length == 0){
                         archiveApp.canForceDelete = true;
                         archiveApp.askConfirmationToDelete = false;
-                        archiveApp.startArchive();
+                        archiveApp.startArchiveNextStep();
                     } else {
                         archiveApp.canForceDelete = false;
                         archiveApp.askConfirmationToDelete = true;

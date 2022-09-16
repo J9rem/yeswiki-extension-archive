@@ -204,20 +204,28 @@ class ArchiveService
 
     /**
      * check if a recent and valided backup is present
-     * @param  string $token
+     * @param mixed $token
      * @return bool
      */
-    public function hasValidatedBackup(string $token): bool
+    public function hasValidatedBackup($token): bool
     {
+        $status = $this->getArchivingStatus();
+        // skip backup if not writable, because could be bloking otherwise
+        if (!$status['canArchive'] && !$status['privatePathWritable']) {
+            return true;
+        }
+        if (empty($token) || !is_string($token)) {
+            return false;
+        }
         $privatePath = $this->getPrivateFolder();
         $info = $this->getInfoFromFile($privatePath);
-        $result = (
-            !empty($token) &&
-            $this->getArchivingStatus()['canArchive'] &&
-            !empty($info[$token]) &&
-            isset($info[$token]['isForcedUpdate']) &&
-            $info[$token]['isForcedUpdate'] === true
-        );
+        $result =
+            (
+                $status['privatePathWritable'] &&
+                !empty($info[$token]) &&
+                isset($info[$token]['isForcedUpdate']) &&
+                $info[$token]['isForcedUpdate'] === true
+            );
         foreach ($info as $uid => $data) {
             if (isset($data['isForcedUpdate']) && $data['isForcedUpdate'] === true) {
                 $this->cleanUID($uid, $privatePath);
@@ -228,16 +236,15 @@ class ArchiveService
 
     /**
      * retrieve the current status to archive
-     * @return array ['canArchive' => bool,'archiving' => bool, 'hibernated' => bool, 'privatePathWritable' => true]
+     * @return array ['canArchive' => bool,'archiving' => bool, 'hibernated' => bool, 'privatePathWritable' => bool, 'canExec' => bool]
      */
     public function getArchivingStatus(): array
     {
-        $canArchive = true;
         $archiving = false;
         $hibernated = false;
         $privatePathWritable = true;
+        $canExec = false;
         if ($this->securityController->isWikiHibernated()) {
-            $canArchive = false;
             switch ($this->params->get('wiki_status')) {
                 case 'archiving':
                     $archiving = true;
@@ -254,14 +261,47 @@ class ArchiveService
             $privatePath = $this->getPrivateFolder();
         } catch (Exception $th) {
             $privatePathWritable = false;
-            $canArchive = false;
             $privatePath = "";
         }
-        if (!empty($privatePath) && !is_writable($privatePath)) {
-            $privatePathWritable = false;
-            $canArchive = false;
+        if (!empty($privatePath)) {
+            if (!$this->canWriteFolder($privatePath)) {
+                $privatePathWritable = false;
+            } else {
+                $i = 0;
+                do {
+                    $tmpFileName = "$privatePath/tmp$i.txt";
+                    $i++;
+                } while (file_exists($tmpFileName));
+                try {
+                    file_put_contents($tmpFileName, "test");
+                    if (!file_exists($tmpFileName)) {
+                        throw new Exception("Not writable folder");
+                    }
+                    $content = file_get_contents($tmpFileName);
+                    if ($content != "test") {
+                        throw new Exception("Bad content");
+                    }
+                    unlink($tmpFileName);
+                } catch (Throwable $th) {
+                    $privatePathWritable = false;
+                    if (file_exists($tmpFileName)) {
+                        unlink($tmpFileName);
+                    }
+                }
+            }
         }
-        return compact(['canArchive','archiving','hibernated','privatePathWritable']);
+
+        // test console
+        $results = $this->consoleService->startConsoleSync('helloworld:hello', []);
+        if (!empty($results)) {
+            $result = $results[array_key_first($results)];
+            if (empty($result['stderr']) && !empty($result['stdout']) &&
+                preg_match("/^Hello !(?:\r|\n)+/", $result['stdout'])) {
+                $canExec = true;
+            }
+        }
+        $canArchive = (!$archiving && !$hibernated && $privatePathWritable && $canExec);
+        return compact(['canArchive','archiving','hibernated','privatePathWritable','canExec']);
     }
 
     /**
@@ -270,9 +310,7 @@ class ArchiveService
      */
     public function getForcedUpdateToken(): string
     {
-        if (!$this->getArchivingStatus()['canArchive']) {
-            return "";
-        }
+        $status = $this->getArchivingStatus();
         $privatePath = $this->getPrivateFolder();
         $uidData = $this->getUID($privatePath);
         $info = $this->getInfoFromFile($privatePath);
@@ -740,12 +778,15 @@ class ArchiveService
     {
         $archiveParams = $this->getArchiveParams();
         if (!empty($archiveParams[self::KEY_FOR_PRIVATE_FOLDER]) &&
-            is_string($archiveParams[self::KEY_FOR_PRIVATE_FOLDER]) &&
-            is_dir($archiveParams[self::KEY_FOR_PRIVATE_FOLDER]) &&
+            is_string($archiveParams[self::KEY_FOR_PRIVATE_FOLDER])) {
+            if (is_dir($archiveParams[self::KEY_FOR_PRIVATE_FOLDER]) &&
             $this->canWriteFolder($archiveParams[self::KEY_FOR_PRIVATE_FOLDER])) {
-            // TODO check if the private folder is included in root path
-            // then check if this private folder is not accessible from internet
-            return preg_replace("/(\/|\\\\)$/", "", $archiveParams[self::KEY_FOR_PRIVATE_FOLDER]);
+                // TODO check if the private folder is included in root path
+                // then check if this private folder is not accessible from internet
+                return preg_replace("/(\/|\\\\)$/", "", $archiveParams[self::KEY_FOR_PRIVATE_FOLDER]);
+            } else {
+                throw new Exception("Not writable ".self::PARAMS_KEY_IN_WAKKA."[".self::KEY_FOR_PRIVATE_FOLDER."]");
+            }
         } else {
             $this->createFolder(sys_get_temp_dir().DIRECTORY_SEPARATOR, self::DEFAULT_FOLDER_NAME_IN_TMP);
             $mainTmpDir = sys_get_temp_dir().DIRECTORY_SEPARATOR.self::DEFAULT_FOLDER_NAME_IN_TMP;

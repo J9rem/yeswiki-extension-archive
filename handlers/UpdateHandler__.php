@@ -65,7 +65,7 @@ class UpdateHandler__ extends YesWikiHandler
     {
         $pageContent =
         <<<CONTENT
-        {{nav class="nav nav-tabs" links="GererMisesAJour, GererSauvegardes" titles="Mises à jour / extensions, Sauvegardes" }}
+        {{nav class="nav nav-tabs" links="GererConfig, GererMisesAJour, GererSauvegardes" titles="Fichier de conf,Mises à jour / extensions,Sauvegardes" }}
         
         {{adminbackups}}
         CONTENT;
