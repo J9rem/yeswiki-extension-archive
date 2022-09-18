@@ -35,6 +35,7 @@ return [
 
     'EDIT_CONFIG_GROUP_ARCHIVE' => 'Archivage',
     'EDIT_CONFIG_HINT_ARCHIVE[PRIVATEPATH]' => 'Localisation des sauvegardes (vide = dossier temporaire si possible)',
+    'EDIT_CONFIG_HINT_ARCHIVE[CALL_ARCHIVE_ASYNC]' => 'Lancer les opérations de sauvegardes en arrière-plan (true/false)',
 
     // templates/autoupdate/core.twig
     'ARCHIVE_MANAGE_BACKUPS' => 'Gérer les sauvegardes',

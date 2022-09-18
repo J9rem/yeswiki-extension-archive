@@ -244,6 +244,10 @@ class ArchiveService
         $hibernated = false;
         $privatePathWritable = true;
         $canExec = false;
+        $archiveParams = $this->getArchiveParams();
+        $callAsync = (isset($archiveParams['call_archive_async']) && is_bool($archiveParams['call_archive_async']))
+            ? $archiveParams['call_archive_async']
+            : true;
         if ($this->securityController->isWikiHibernated()) {
             switch ($this->params->get('wiki_status')) {
                 case 'archiving':
@@ -301,7 +305,7 @@ class ArchiveService
             }
         }
         $canArchive = (!$archiving && !$hibernated && $privatePathWritable && $canExec);
-        return compact(['canArchive','archiving','hibernated','privatePathWritable','canExec']);
+        return compact(['canArchive','archiving','hibernated','privatePathWritable','canExec','callAsync']);
     }
 
     /**
@@ -326,50 +330,63 @@ class ArchiveService
 
 
     /**
-     * start archive async via CLI
+     * start archive async via CLI or directly if sync
      *
      * @param bool $savefiles
      * @param bool $savedatabase
      * @param array $extrafiles
      * @param array $excludedfiles
+     * @param bool $callAsync
      * @return string uid
      */
-    public function startArchiveAsync(
+    public function startArchive(
         bool $savefiles = true,
         bool $savedatabase = true,
         array $extrafiles = [],
-        array $excludedfiles = []
+        array $excludedfiles = [],
+        bool $callAsync = true
     ): string {
-        $args = [];
-        if (!$savefiles) {
-            $args[] = "-d";
-        }
-        if (!$savedatabase) {
-            $args[] = "-f";
-        }
-        if (!empty($extrafiles)) {
-            $args[] = "-e";
-            $args[] = implode(",", $extrafiles);
-        }
-        if (!empty($excludedfiles)) {
-            $args[] = "-x";
-            $args[] = implode(",", $excludedfiles);
-        }
-
         $privatePath = $this->getPrivateFolder();
         $uidData = $this->getUID($privatePath);
-        $args[] = "-u";
-        $args[] = $uidData['uid'];
-        $process = $this->consoleService->startConsoleAsync(
-            'archive:archive',
-            $args
-        );
-        if (!empty($process)) {
-            $this->updatePIDForUID($process->getPid(), $uidData['uid'], $privatePath);
-            return $uidData['uid'];
+        if ($callAsync){
+            $args = [];
+            if (!$savefiles) {
+                $args[] = "-d";
+            }
+            if (!$savedatabase) {
+                $args[] = "-f";
+            }
+            if (!empty($extrafiles)) {
+                $args[] = "-e";
+                $args[] = implode(",", $extrafiles);
+            }
+            if (!empty($excludedfiles)) {
+                $args[] = "-x";
+                $args[] = implode(",", $excludedfiles);
+            }
+
+            $args[] = "-u";
+            $args[] = $uidData['uid'];
+            $process = $this->consoleService->startConsoleAsync(
+                'archive:archive',
+                $args
+            );
+            if (!empty($process)) {
+                $this->updatePIDForUID($process->getPid(), $uidData['uid'], $privatePath);
+                return $uidData['uid'];
+            } else {
+                $this->cleanUID($uidData['uid'], $privatePath);
+                return '';
+            }
         } else {
-            $this->cleanUID($uidData['uid'], $privatePath);
-            return '';
+            $output = "";
+            $location = $this->archive($output, $savefiles, $savedatabase, $extrafiles, $excludedfiles, $anonymous, $uidData['uid']);
+            if (empty($location)){
+                $this->cleanUID($uidData['uid'], $privatePath);
+                return '';
+            } else {
+                return $uidData['uid'];
+            }
         }
     }
 
@@ -451,9 +468,10 @@ class ArchiveService
     /**
      * get uid status
      * @param string $uid
+     * @param bool $forceStarted
      * @return array ['found'=> bool,'running' => bool,'finished'=>bool,'output' => string]
      */
-    public function getUIDStatus(string $uid): array
+    public function getUIDStatus(string $uid, bool $forceStarted = false): array
     {
         $results = [
             'started' => false,
@@ -474,10 +492,9 @@ class ArchiveService
         $info = $this->getInfoFromFile($privateFolder);
         if (!isset($info[$uid])) {
             return $results;
-        } elseif (empty($info[$uid]['pid'])) {
+        } elseif (!$forceStarted && empty($info[$uid]['pid'])) {
             $this->cleanUID($uid, $privateFolder);
         } else {
-            $pid = $info[$uid]['pid'];
             $results['started'] = true;
             list(
                 'running' => $running,

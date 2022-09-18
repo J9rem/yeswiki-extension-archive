@@ -32,7 +32,7 @@ class ApiController extends YesWikiController
      */
     public function getArchiveStatus($uid)
     {
-        return $this->getService(ArchiveController::class)->getArchiveStatus($uid);
+        return $this->getService(ArchiveController::class)->getArchiveStatus($uid,empty($_GET['forceStarted']) ? false : in_array($_GET['forceStarted'],[1,true,"1","true"],true));
     }
 
     /**

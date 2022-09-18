@@ -24,6 +24,9 @@ return [
     "ADMIN_BACKUPS_RESTORE_ARCHIVE_SUCCESS" => "Restauration réussie de {filename}",
     "ADMIN_BACKUPS_RESTORE_ARCHIVE_ERROR" => "Restauration impossible de {filename}",
     "ADMIN_BACKUPS_START_BACKUP" => "Lancement d'une sauvegarde",
+    "ADMIN_BACKUPS_START_BACKUP_SYNC" => "Lancement d'une sauvegarde en direct (moins stable)\n".
+        "Il ne sera pas possible de mettre à jour le statut en direct\n".
+        "Ne pas fermer, ni rafraîchir cette fenêtre !",
     "ADMIN_BACKUPS_STARTED" => "Sauvegarde lancée",
     "ADMIN_BACKUPS_START_BACKUP_ERROR" => "Lancement de la sauvegarde impossible",
     "ADMIN_BACKUPS_UPDATE_UID_STATUS_ERROR" => "Impossible de mettre à jour le statut de la sauvegarde",

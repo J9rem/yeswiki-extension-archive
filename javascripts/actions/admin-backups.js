@@ -9,13 +9,15 @@
 
 import SpinnerLoader from '../../../bazar/presentation/javascripts/components/SpinnerLoader.js'
 
-let rootsElements = ['.admin-backups-container'];
+let rootsElements = ['.admin-backups-container','.preupdate-backups-container'];
 let isVueJS3 = (typeof Vue.createApp == "function");
 
 let appParams = {
     components: { SpinnerLoader },
     data: function() {
         return {
+            canForceUpdate: false,
+            isPreupdate: false,
             archives: {},
             ready: false,
             updating: false,
@@ -40,6 +42,10 @@ let appParams = {
             stoppingArchive: false,
             canForceDelete: false,
             askConfirmationToDelete: false,
+            upgradeName: "",
+            showReturn: true,
+            warnIfNotStarted: true,
+            callAsync: true,
         };
     },
     methods: {
@@ -205,6 +211,7 @@ let appParams = {
                         archiveApp.endStartingUpdateError();
                         return;
                     } else if (data.canArchive){
+                        archiveApp.callAsync = (!data.hasOwnProperty('callAsync') || data.callAsync);
                         archiveApp.startArchiveNextStep();
                         return;
                     } else if (data.hasOwnProperty('archiving') && data.archiving) {
@@ -229,13 +236,21 @@ let appParams = {
         },
         startArchiveNextStep: function(){
             let archiveApp = this;
-            if (!archiveApp.canForceDelete){
-                archiveApp.checkFilesToDelete();
-                return ;
+            archiveApp.updating = true;
+            archiveApp.archiving = true;
+            if (!archiveApp.isPreupdate){
+                if (!archiveApp.canForceDelete){
+                    archiveApp.checkFilesToDelete();
+                    return ;
+                }
+                archiveApp.canForceDelete = false;
+                archiveApp.askConfirmationToDelete = false;
             }
-            archiveApp.canForceDelete = false;
-            archiveApp.askConfirmationToDelete = false;
-            $.ajax({
+            if (!archiveApp.callAsync){
+                archiveApp.archiveMessage = _t('ADMIN_BACKUPS_START_BACKUP_SYNC').replace(/\n/g,'<br>');
+                archiveApp.archiveMessageClass = {alert:true,['alert-warning']:true};
+            }
+            let ajaxOptions = {
                 method: "POST",
                 url: wiki.url(`api/archives`),
                 data: {
@@ -245,18 +260,25 @@ let appParams = {
                         savedatabase: archiveApp.savedatabase,
                         extrafiles: archiveApp.extrafiles,
                         excludedfiles: archiveApp.excludedfiles
-                    }
+                    },
+                    callAsync: archiveApp.callAsync
                 },
                 success: function(data){
-                    archiveApp.archiveMessage = _t('ADMIN_BACKUPS_STARTED');
-                    archiveApp.archiveMessageClass = {alert:true,['alert-info']:true};
+                    if (archiveApp.callAsync){
+                        archiveApp.archiveMessage = _t('ADMIN_BACKUPS_STARTED');
+                        archiveApp.archiveMessageClass = {alert:true,['alert-info']:true};
+                    }
                     archiveApp.currentArchiveUid = data.uid;
                     setTimeout(archiveApp.updateStatus, 2000);
                 },
-                error: function(){
-                    archiveApp.endStartingUpdateError();
+                error: function(xhr,status,error){
+                    archiveApp.endStartingUpdateError(`${_t('ADMIN_BACKUPS_START_BACKUP_ERROR')} (${error})`);
                 }
-            });
+            };
+            if (!archiveApp.callAsync){
+                ajaxOptions.timeout = 6000000 ; // timeout 10 minutes if sync
+            }
+            $.ajax(ajaxOptions);
         },
         endStartingUpdateError: function(message = ""){
             let archiveApp = this;
@@ -264,6 +286,9 @@ let appParams = {
             archiveApp.archiveMessageClass = {alert:true,['alert-danger']:true};
             archiveApp.updating = false;
             archiveApp.archiving = false;
+            if (archiveApp.isPreupdate){
+                archiveApp.canForceUpdate = true;
+            }
         },
         checkFilesToDelete: function (){
             let archiveApp = this;
@@ -279,6 +304,8 @@ let appParams = {
                         archiveApp.askConfirmationToDelete = false;
                         archiveApp.startArchiveNextStep();
                     } else {
+                        archiveApp.updating = false;
+                        archiveApp.archiving = false;
                         archiveApp.canForceDelete = false;
                         archiveApp.askConfirmationToDelete = true;
                         archiveApp.archiveMessage = _t('ADMIN_BACKUPS_CONFIRMATION_TO_DELETE',{
@@ -319,10 +346,19 @@ let appParams = {
         updateStatus: function(){
             if (this.currentArchiveUid.length > 0){
                 let archiveApp= this;
+                archiveApp.warnIfNotStarted = false;
+                setTimeout(() => {
+                    archiveApp.warnIfNotStarted = true ;
+                }, 5000);
+                let getData = {};
+                if (!archiveApp.callAsync){
+                    getData.forceStarted = true;
+                }
                 $.ajax({
                     method: "GET",
                     url: wiki.url(`api/archives/uidstatus/${archiveApp.currentArchiveUid}`),
                     cache: false,
+                    data: getData,
                     success: function(data){
                         if (data.stopped){
                             archiveApp.endUpdatingStatus(_t('ADMIN_BACKUPS_UID_STATUS_STOP'),'success');
@@ -330,9 +366,17 @@ let appParams = {
                             archiveApp.endUpdatingStatus(_t('ADMIN_BACKUPS_UID_STATUS_NOT_FOUND'),'warning');
                             setTimeout(archiveApp.loadArchives, 3000);
                         } else if (data.finished){
-                            archiveApp.endUpdatingStatus(_t('ADMIN_BACKUPS_UID_STATUS_FINISHED'),'success');
+                            if (archiveApp.isPreupdate){
+                                archiveApp.startForcedUpdate(_t('ADMIN_BACKUPS_UID_STATUS_FINISHED')+'<br/>'+_t('ADMIN_BACKUPS_UID_STATUS_FINISHED_THEN_UPDATING'));
+                            } else {
+                                archiveApp.endUpdatingStatus(_t('ADMIN_BACKUPS_UID_STATUS_FINISHED'),'success');
+                            }
                         } else if (!data.running) {
-                            archiveApp.endUpdatingStatus(_t('ADMIN_BACKUPS_UID_STATUS_NOT_FINISHED'),'danger');
+                            if (archiveApp.warnIfNotStarted) {
+                                archiveApp.endUpdatingStatus(_t('ADMIN_BACKUPS_UID_STATUS_NOT_FINISHED'),'danger');
+                            } else {
+                                setTimeout(archiveApp.updateStatus, 1000);
+                            }
                         } else if (archiveApp.stoppingArchive) {
                             archiveApp.archiveMessage = _t('ADMIN_BACKUPS_STOPPING_ARCHIVE');
                             archiveApp.archiveMessage += "<pre>"+data.output.split("\n").slice(-5).join("<br>")+"</pre>";
@@ -360,7 +404,9 @@ let appParams = {
             this.archiving = false;
             this.stoppingArchive = false;
             this.currentArchiveUid = "";
-            this.loadArchives();
+            if (!this.isPreupdate){
+                this.loadArchives();
+            }
         },
         formatFileSize: function (bytes,decimalPoint) {
             if(bytes == 0) return '0';
@@ -417,9 +463,56 @@ let appParams = {
                 }
             }
             this.$refs.newExcludedFile.value = "";
+        },
+        forceUpdate: function() {
+            let archiveApp = this;
+            $.ajax({
+                method: "GET",
+                url: wiki.url(`api/archives/forcedUpdateToken/`),
+                cache: false,
+                success: function(data){
+                    if (
+                        typeof archiveApp.upgradeName != "string" ||
+                        archiveApp.upgradeName.length == 0 ||
+                        typeof data != "object" || 
+                        !data.hasOwnProperty('token') || 
+                        typeof data.token != "string" || 
+                        data.token.length == 0){
+                        archiveApp.endStartingUpdateError(_t('ADMIN_BACKUPS_FORCED_UPDATE_NOT_POSSIBLE'));
+                        archiveApp.canForceUpdate = false;
+                    } else {
+                        window.location = wiki.url(wiki.pageTag,{upgrade:archiveApp.upgradeName,forcedUpdateToken:data.token});
+                    }
+                },
+                error: function(){
+                    archiveApp.endStartingUpdateError(_t('ADMIN_BACKUPS_FORCED_UPDATE_NOT_POSSIBLE'));
+                    archiveApp.canForceUpdate = false;
+                }
+            });
+        },
+        bypassArchive: function(){
+            let archiveApp = this;
+            if (archiveApp.archiving){
+                archiveApp.stopArchive();
+                setTimeout(() => {
+                    this.startForcedUpdate(_t('ADMIN_BACKUPS_UID_STATUS_FINISHED_THEN_UPDATING'));
+                }, 2000);
+            } else {
+                this.startForcedUpdate(_t('ADMIN_BACKUPS_UID_STATUS_FINISHED_THEN_UPDATING'));
+            }
+        },
+        startForcedUpdate: function(message){
+            this.endUpdatingStatus(message,'success');
+            this.showReturn = false;
+            this.forceUpdate();
         }
     },
     mounted (){
+        let nodeElement = isVueJS3 ? this.$el.parentNode : this.$el;
+        this.isPreupdate = $(nodeElement).hasClass('preupdate-backups-container');
+        if (this.isPreupdate){
+            this.upgradeName = $(nodeElement).data("upgrade");
+        }
         if (isVueJS3){
             $(this.$el.parentNode).on(
                 "dblclick",
@@ -435,7 +528,11 @@ let appParams = {
                 }
               );
         }
-        this.loadArchives();
+        if (this.isPreupdate){
+            this.startArchive();
+        } else {
+            this.loadArchives();   
+        }
     }
 };
 
