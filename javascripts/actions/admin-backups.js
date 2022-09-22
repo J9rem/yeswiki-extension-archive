@@ -539,13 +539,17 @@ let appParams = {
 if (isVueJS3){
     let app = Vue.createApp(appParams);
     rootsElements.forEach(elem => {
-        app.mount(elem);
+        if ($(elem).length > 0){
+            app.mount(elem);
+        }
     });
 } else {
     rootsElements.forEach(elem => {
-        new Vue({
-            ...{el:elem},
-            ...appParams
-        });
+        if ($(elem).length > 0){
+            new Vue({
+                ...{el:elem},
+                ...appParams
+            });
+        }
     });
 }

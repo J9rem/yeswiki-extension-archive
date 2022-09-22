@@ -380,7 +380,7 @@ class ArchiveService
             }
         } else {
             $output = "";
-            $location = $this->archive($output, $savefiles, $savedatabase, $extrafiles, $excludedfiles, $anonymous, $uidData['uid']);
+            $location = $this->archive($output, $savefiles, $savedatabase, $extrafiles, $excludedfiles, null, $uidData['uid']);
             if (empty($location)){
                 $this->cleanUID($uidData['uid'], $privatePath);
                 return '';
