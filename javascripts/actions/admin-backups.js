@@ -326,6 +326,15 @@ let appParams = {
             this.canForceDelete = !this.canForceDelete;
         },
         stopArchive: function (){
+            if (!this.archiving || this.stoppingArchive){
+                return false;
+            }
+            if (this.currentArchiveUid.length == 0){
+                setTimeout(() => {
+                    this.stopArchive()
+                }, 300);
+                return;
+            }
             this.stoppingArchive = true;
             let archiveApp = this;
             $.ajax({
@@ -495,10 +504,10 @@ let appParams = {
             if (archiveApp.archiving){
                 archiveApp.stopArchive();
                 setTimeout(() => {
-                    this.startForcedUpdate(_t('ADMIN_BACKUPS_UID_STATUS_FINISHED_THEN_UPDATING'));
-                }, 2000);
+                    archiveApp.bypassArchive();
+                }, 1000);
             } else {
-                this.startForcedUpdate(_t('ADMIN_BACKUPS_UID_STATUS_FINISHED_THEN_UPDATING'));
+                archiveApp.startForcedUpdate(_t('ADMIN_BACKUPS_UID_STATUS_FINISHED_THEN_UPDATING'));
             }
         },
         startForcedUpdate: function(message){
