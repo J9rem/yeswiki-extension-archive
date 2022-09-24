@@ -326,10 +326,10 @@ let appParams = {
             this.canForceDelete = !this.canForceDelete;
         },
         stopArchive: function (){
-            if (!this.archiving || this.stoppingArchive){
+            if (this.stoppingArchive){
                 return false;
             }
-            if (this.currentArchiveUid.length == 0){
+            if (this.archiving && this.currentArchiveUid.length == 0){
                 setTimeout(() => {
                     this.stopArchive()
                 }, 300);
