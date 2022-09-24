@@ -341,6 +341,7 @@ let appParams = {
                 success: function(data){
                     archiveApp.archiveMessage = _t('ADMIN_BACKUPS_STOPPING_ARCHIVE');
                     archiveApp.archiveMessageClass = {alert:true,['alert-warning']:true};
+                    setTimeout(archiveApp.checkStopped,500);
                 },
                 error: function(xhr,status,error){
                     archiveApp.archiveMessage = _t('ADMIN_BACKUPS_STOP_BACKUP_ERROR');
