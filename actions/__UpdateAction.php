@@ -32,10 +32,11 @@ class __UpdateAction extends YesWikiAction
         $this->archiveService = $this->getService(ArchiveService::class);
         $this->securityController = $this->getService(SecurityController::class);
 
-        if (!$this->securityController->isWikiHibernated() &&
+        if (
             $this->wiki->UserIsAdmin() &&
             isset($_GET['upgrade']) &&
-            !$this->archiveService->hasValidatedBackup($_GET['forcedUpdateToken'] ?? "")
+            !$this->archiveService->hasValidatedBackup($_GET['forcedUpdateToken'] ?? "") &&
+            !$this->securityController->isWikiHibernated()
         ) {
             $upgrade = $_GET['upgrade'];
             unset($_GET['upgrade']);
