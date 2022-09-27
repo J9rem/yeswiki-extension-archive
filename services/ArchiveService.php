@@ -33,7 +33,10 @@ class ArchiveService
         'tools/*/node_modules',
         '.git',
         'tools/*/.git',
-        "cache/*"
+        "cache/*",
+        'private/backups/*.zip',
+        'private/backups/info.json',
+        'private/backups/*.log'
     ];
     public const DEFAULT_PARAMS_TO_ANONYMIZE = [
         'mysql_host' => '',
@@ -117,6 +120,19 @@ class ArchiveService
         if (!empty($outputFile)) {
             file_put_contents($outputFile, "");
         }
+
+        // checking folder not available on the internet
+        file_put_contents("$privatePath/tmpTestFile000.txt", "test");
+        $error = !$this->localPrivateFolderNotAvailableOnInternet($privatePath, "tmpTestFile000.txt");
+        if (file_exists("$privatePath/tmpTestFile000.txt")) {
+            unlink("$privatePath/tmpTestFile000.txt");
+        }
+        if ($error) {
+            $this->writeOutput($output, "! Private folder available on the internet", true, $outputFile);
+            $this->writeOutput($output, "STOP", true, $outputFile);
+            return "";
+        }
+
         $this->writeOutput($output, "=== Checking free space ===", true, $outputFile);
         $this->assertEnoughtSpace();
         $this->writeOutput($output, "There is enough free space.", true, $outputFile);
@@ -243,6 +259,7 @@ class ArchiveService
         $archiving = false;
         $hibernated = false;
         $privatePathWritable = true;
+        $notAvailableOnTheInternet = true;
         $canExec = false;
         $archiveParams = $this->getArchiveParams();
         $callAsync = (isset($archiveParams['call_archive_async']) && is_bool($archiveParams['call_archive_async']))
@@ -285,6 +302,7 @@ class ArchiveService
                     if ($content != "test") {
                         throw new Exception("Bad content");
                     }
+                    $notAvailableOnTheInternet = $this->localPrivateFolderNotAvailableOnInternet($privatePath, basename($tmpFileName));
                     unlink($tmpFileName);
                 } catch (Throwable $th) {
                     $privatePathWritable = false;
@@ -304,8 +322,8 @@ class ArchiveService
                 $canExec = true;
             }
         }
-        $canArchive = (!$archiving && !$hibernated && $privatePathWritable && $canExec);
-        return compact(['canArchive','archiving','hibernated','privatePathWritable','canExec','callAsync']);
+        $canArchive = (!$archiving && !$hibernated && $privatePathWritable && $notAvailableOnTheInternet && $canExec);
+        return compact(['canArchive','archiving','hibernated','privatePathWritable','canExec','callAsync','notAvailableOnTheInternet']);
     }
 
     /**
@@ -348,7 +366,7 @@ class ArchiveService
     ): string {
         $privatePath = $this->getPrivateFolder();
         $uidData = $this->getUID($privatePath);
-        if ($callAsync){
+        if ($callAsync) {
             $args = [];
             if (!$savefiles) {
                 $args[] = "-d";
@@ -381,7 +399,7 @@ class ArchiveService
         } else {
             $output = "";
             $location = $this->archive($output, $savefiles, $savedatabase, $extrafiles, $excludedfiles, null, $uidData['uid']);
-            if (empty($location)){
+            if (empty($location)) {
                 $this->cleanUID($uidData['uid'], $privatePath);
                 return '';
             } else {
@@ -794,13 +812,16 @@ class ArchiveService
     private function getPrivateFolder(): string
     {
         $archiveParams = $this->getArchiveParams();
-        if (!empty($archiveParams[self::KEY_FOR_PRIVATE_FOLDER]) &&
-            is_string($archiveParams[self::KEY_FOR_PRIVATE_FOLDER])) {
-            if (is_dir($archiveParams[self::KEY_FOR_PRIVATE_FOLDER]) &&
-            $this->canWriteFolder($archiveParams[self::KEY_FOR_PRIVATE_FOLDER])) {
-                // TODO check if the private folder is included in root path
-                // then check if this private folder is not accessible from internet
-                return preg_replace("/(\/|\\\\)$/", "", $archiveParams[self::KEY_FOR_PRIVATE_FOLDER]);
+        $folderPath = (
+            empty($archiveParams[self::KEY_FOR_PRIVATE_FOLDER]) ||
+            !is_string($archiveParams[self::KEY_FOR_PRIVATE_FOLDER])
+        )
+            ? "%TMP"
+            : $archiveParams[self::KEY_FOR_PRIVATE_FOLDER];
+        if ($folderPath != "%TMP") {
+            if (is_dir($folderPath) &&
+            $this->canWriteFolder($folderPath)) {
+                return preg_replace("/(\/|\\\\)$/", "", $folderPath);
             } else {
                 throw new Exception("Not writable ".self::PARAMS_KEY_IN_WAKKA."[".self::KEY_FOR_PRIVATE_FOLDER."]");
             }
@@ -828,7 +849,7 @@ class ArchiveService
     private function createFolder(string $basePath, string $path)
     {
         if (file_exists($basePath.$path) && !is_dir($basePath.$path)) {
-            throw new Exception("Folder \"$path\" in tmp should be a directory !");
+            throw new Exception("Folder \"$path\" in \"$basePath\" should be a directory !");
         } elseif (!file_exists($basePath.$path)) {
             mkdir($basePath.$path);
         }
@@ -850,6 +871,48 @@ class ArchiveService
             ($perms & 0x0080) &&           // writable by owner
             ($perms & 0x0010)              // writable by group
         );
+    }
+
+    private function localPrivateFolderNotAvailableOnInternet(string $localPath, string $testFileName): bool
+    {
+        $isAbsolutePath = (
+            in_array(substr($localPath, 0, 1), ["/",DIRECTORY_SEPARATOR]) ||
+            (
+                DIRECTORY_SEPARATOR == "\\" &&
+                (
+                    preg_match("/^[A-Za-z]:.*$/", $localPath)
+                )
+            )
+        );
+        $basePath = realpath(getcwd());
+        $realLocalPath = $isAbsolutePath
+            ? realpath($localPath)
+            : realpath($basePath . DIRECTORY_SEPARATOR . str_replace("/", DIRECTORY_SEPARATOR, $localPath));
+        $isLocal = (substr($realLocalPath, 0, strlen($basePath)) == $basePath);
+        if (!$isLocal) {
+            return true;
+        }
+        if (!file_exists("$localPath/$testFileName")) {
+            throw new Exception("\"$localPath/$testFileName\" must exist for tests !");
+        }
+        $url = preg_replace("/\??$/", "", $this->params->get('base_url'));
+        $url .= str_replace(DIRECTORY_SEPARATOR, "/", "$localPath/$testFileName");
+
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HEADER, 1);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3); // connect timeout in seconds
+        curl_setopt($ch, CURLOPT_TIMEOUT, 5); // total timeout in seconds
+        $output = curl_exec($ch);
+        $error = curl_errno($ch);
+        curl_close($ch);
+
+        if ($error) {
+            return false;
+        }
+
+        return preg_match("/(?:^|\n)".preg_quote("HTTP/1.1 ", "/")."([0-9]{3}) /", $output, $match) && preg_match("/^[45][0-9]{2}$/", $match[1]);
     }
 
     /**
