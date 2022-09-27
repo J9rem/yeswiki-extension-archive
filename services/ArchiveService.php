@@ -254,6 +254,9 @@ class ArchiveService
                 $this->cleanUID($uid, $privatePath);
             }
         }
+        if ($result && !$status['canArchive'] && $status['archiving']) {
+            $this->unsetWikiStatus();
+        }
         return $result;
     }
 
