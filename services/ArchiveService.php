@@ -52,7 +52,7 @@ class ArchiveService
     public const KEY_FOR_PRIVATE_FOLDER = 'privatePath';
     public const KEY_FOR_EXTRAFILES = 'extrafiles';
     public const KEY_FOR_EXCLUDEDFILES = 'excludedfiles';
-    public const KEY_FOR_ANONYMOUS = 'anonymous';
+    public const KEY_FOR_HIDE_CONFIG_VALUES = 'hideConfigValues';
     protected const DEFAULT_FOLDER_NAME_IN_TMP = "yeswiki_archive";
     public const ARCHIVE_SUFFIX = "_archive";
     public const ARCHIVE_ONLY_FILES_SUFFIX = "_archive_only_files";
@@ -64,7 +64,6 @@ class ArchiveService
         "It **MUST NOT** be accessible from the internet.\n\n".
         " - On Apache server, check that the file `.htaccess` is taken in count.\n".
         " - On Nginx server or other, configure the server to **deny all** access on this folder\n";
-    public const MAX_NB_FILES = 10;
 
     protected $configurationService;
     protected $consoleService;
@@ -93,7 +92,7 @@ class ArchiveService
      * @param bool $savedatabase
      * @param array $extrafiles
      * @param array $excludedfiles
-     * @param null|array $anonymousParams
+     * @param null|array $hideConfigValuesParams
      * @param string $uid
      * @throws Exception
      */
@@ -103,7 +102,7 @@ class ArchiveService
         bool $savedatabase = true,
         array $extrafiles = [],
         array $excludedfiles = [],
-        ?array $anonymousParams = null,
+        ?array $hideConfigValuesParams = null,
         string $uid = ""
     ) {
         $inputFile = "";
@@ -169,7 +168,7 @@ class ArchiveService
                 return "";
             }
         } else {
-            $dataFiles = [];
+            $dataFiles = ['preparedExcludedFiles' => [],'extrafiles' => [], 'excludedfiles' => [], 'onlyChildren' =>[]];
         }
 
         if ($this->checkIfNeedStop($inputFile)) {
@@ -203,7 +202,7 @@ class ArchiveService
             }
 
             $this->writeOutput($output, "=== Creating zip archive ===", true, $outputFile);
-            $this->createZip($location, $dataFiles, $output, $sqlContent, $onlyDb, $anonymousParams, $inputFile, $outputFile);
+            $this->createZip($location, $dataFiles, $output, $sqlContent, $onlyDb, $hideConfigValuesParams, $inputFile, $outputFile);
             if (!file_exists($location)) {
                 throw new StopArchiveException("Stop archive : not saved !");
             }
@@ -272,6 +271,7 @@ class ArchiveService
         $notAvailableOnTheInternet = true;
         $enoughSpace = true;
         $canExec = false;
+        $dB = false;
         $archiveParams = $this->getArchiveParams();
         $callAsync = (isset($archiveParams['call_archive_async']) && is_bool($archiveParams['call_archive_async']))
             ? $archiveParams['call_archive_async']
@@ -299,11 +299,10 @@ class ArchiveService
             if (!$this->canWriteFolder($privatePath)) {
                 $privatePathWritable = false;
             } else {
-                $i = 0;
-                do {
-                    $tmpFileName = "$privatePath/tmp$i.txt";
-                    $i++;
-                } while (file_exists($tmpFileName));
+                $tmpFileName = "$privatePath/tmp.txt";
+                if (file_exists($tmpFileName)) {
+                    unlink($tmpFileName);
+                }
                 try {
                     file_put_contents($tmpFileName, "test");
                     if (!file_exists($tmpFileName)) {
@@ -337,14 +336,19 @@ class ArchiveService
         } catch (Throwable $th) {
             $canExec = false;
         }
+
+        // test db
+        if ($canExec) {
+            $dB = $this->testDb();
+        }
         // free space
         try {
             $this->assertEnoughtSpace();
         } catch (Throwable $th) {
             $enoughSpace = false;
         }
-        $canArchive = (!$archiving && !$hibernated && $privatePathWritable && $notAvailableOnTheInternet && (!$callAsync || $canExec) && $enoughSpace);
-        return compact(['canArchive','archiving','hibernated','privatePathWritable','canExec','callAsync','notAvailableOnTheInternet','enoughSpace']);
+        $canArchive = (!$archiving && !$hibernated && $privatePathWritable && $notAvailableOnTheInternet && (!$callAsync || $canExec) && $dB && $enoughSpace);
+        return compact(['canArchive','archiving','hibernated','privatePathWritable','canExec','callAsync','notAvailableOnTheInternet','enoughSpace','dB']);
     }
 
     /**
@@ -600,7 +604,7 @@ class ArchiveService
      * @param string|OutputInterface &$output
      * @param string $sqlContent
      * @param bool $onlyDb
-     * @param null|array $anonymousParams
+     * @param null|array $hideConfigValuesParams
      * @param string $inputFile
      * @param string $outputFile
      */
@@ -610,7 +614,7 @@ class ArchiveService
         &$output,
         string $sqlContent,
         bool $onlyDb = false,
-        ?array $anonymousParams = null,
+        ?array $hideConfigValuesParams = null,
         string $inputFile = "",
         string $outputFile = ""
     ) {
@@ -649,7 +653,7 @@ class ArchiveService
                                         !in_array($relativeName, $dataFiles['preparedExcludedFiles'])
                                 )) {
                                     if (empty($baseDirName) && $file == "wakka.config.php") {
-                                        $zip->addFromString($relativeName, $this->getWakkaConfigSanitized($dataFiles, $anonymousParams));
+                                        $zip->addFromString($relativeName, $this->getWakkaConfigSanitized($dataFiles, $hideConfigValuesParams));
                                     } elseif (is_file($localName)) {
                                         $zip->addFile($localName, $relativeName);
                                     } elseif (is_dir($localName)) {
@@ -910,6 +914,7 @@ class ArchiveService
             ? realpath($localPath)
             : realpath($basePath . DIRECTORY_SEPARATOR . str_replace("/", DIRECTORY_SEPARATOR, $localPath));
         $isLocal = (substr($realLocalPath, 0, strlen($basePath)) == $basePath);
+
         if (!$isLocal) {
             return true;
         }
@@ -919,21 +924,16 @@ class ArchiveService
         $url = preg_replace("/\??$/", "", $this->params->get('base_url'));
         $url .= str_replace(DIRECTORY_SEPARATOR, "/", "$localPath/$testFileName");
 
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HEADER, 1);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3); // connect timeout in seconds
-        curl_setopt($ch, CURLOPT_TIMEOUT, 5); // total timeout in seconds
-        $output = curl_exec($ch);
-        $error = curl_errno($ch);
-        curl_close($ch);
-
-        if ($error) {
-            return false;
-        }
-
-        return preg_match("/(?:^|\n)".preg_quote("HTTP/1.1 ", "/")."([0-9]{3}) /", $output, $match) && preg_match("/^[45][0-9]{2}$/", $match[1]);
+        $ct = stream_context_set_default([
+            'ssl' => [
+                'verify_peer' => false,
+                'verify_peer_name' => false,
+            ],
+            'http' => [
+                'method' => 'HEAD'
+            ]
+        ]);
+        return !strstr(get_headers($url, true, $ct)[0], '200 OK') ;
     }
 
     /**
@@ -960,10 +960,10 @@ class ArchiveService
     /**
      * sanitize wakka.config.php before saving it
      * @param array $dataFiles
-     * @param null|array $anonymousParams
+     * @param null|array $hideConfigValuesParams
      * @return string
      */
-    private function getWakkaConfigSanitized(array $dataFiles, ?array $anonymousParams = null): string
+    private function getWakkaConfigSanitized(array $dataFiles, ?array $hideConfigValuesParams = null): string
     {
         // get wakka.config.php content
         $config = $this->configurationService->getConfiguration('wakka.config.php');
@@ -980,14 +980,14 @@ class ArchiveService
         if (!empty($dataFiles['excludedfiles'])) {
             $data[self::KEY_FOR_EXCLUDEDFILES] = $dataFiles['excludedfiles'];
         }
-        if (!is_null($anonymousParams)) {
-            $data[self::KEY_FOR_ANONYMOUS] = $anonymousParams;
-        } elseif (!isset($data[self::KEY_FOR_ANONYMOUS]) || !is_array($data[self::KEY_FOR_ANONYMOUS])) {
-            $data[self::KEY_FOR_ANONYMOUS] = self::DEFAULT_PARAMS_TO_ANONYMIZE;
+        if (!is_null($hideConfigValuesParams)) {
+            $data[self::KEY_FOR_HIDE_CONFIG_VALUES] = $hideConfigValuesParams;
+        } elseif (!isset($data[self::KEY_FOR_HIDE_CONFIG_VALUES]) || !is_array($data[self::KEY_FOR_HIDE_CONFIG_VALUES])) {
+            $data[self::KEY_FOR_HIDE_CONFIG_VALUES] = self::DEFAULT_PARAMS_TO_ANONYMIZE;
         }
         $config[self::PARAMS_KEY_IN_WAKKA] = $data;
 
-        $config = $this->setDefaultValuesRecursive($config[self::PARAMS_KEY_IN_WAKKA][self::KEY_FOR_ANONYMOUS], $config);
+        $config = $this->setDefaultValuesRecursive($config[self::PARAMS_KEY_IN_WAKKA][self::KEY_FOR_HIDE_CONFIG_VALUES], $config);
         // remove current wiki_status
         unset($config['wiki_status']);
         return $this->configurationService->getContentToWrite($config);
@@ -1024,50 +1024,54 @@ class ArchiveService
         $this->configurationService->write($config);
     }
 
+
+    /**
+     * test db export connection
+     * @param string $privatePath
+     * @return bool
+     */
+    protected function testDb(): bool
+    {
+        try {
+            $results = $this->consoleService->startConsoleSync('archive:exportdb', [
+                "--test"
+            ]);
+            if (empty($results) || !is_array($results)) {
+                return false;
+            }
+            $result = $results[array_key_first($results)];
+            return (empty($result['stderr']) && !empty($result['stdout']) && preg_match("/^OK\s*$/i", $result['stdout']));
+        } catch (Throwable $th) {
+        }
+        return false;
+    }
+
     /**
      * extract sql content
      * @param string $privatePath
      * @return string $sqlContent
      * @throws Exception
+     * @throws Throwable
      */
     protected function getSQLContent(string $privatePath): string
     {
-        $hostname = $this->params->get('mysql_host');
-        $this->assertParamIsNotEmptyString('mysql_host', $hostname);
-
-        $databasename = $this->params->get('mysql_database');
-        $this->assertParamIsNotEmptyString('mysql_database', $databasename);
-
-        $tablePrefix = $this->params->get('table_prefix');
-        $this->assertParamIsNotEmptyString('table_prefix', $tablePrefix);
-
-        $username = $this->params->get('mysql_user');
-        $this->assertParamIsString('mysql_user', $username);
-
-        $password = $this->params->get('mysql_password');
-        $this->assertParamIsString('mysql_password', $password);
-
-        $resultFile = tempnam($privatePath, 'tmp_sql_file_to_delete');
-        $results = $this->consoleService->findAndStartExecutableSync(
-            "mysqldump",
-            [
-                "--host=$hostname",
-                "--user=$username",
-                "--password=$password",
-                "--result-file=".realpath($resultFile),
-                $databasename, // databasename
-                "{$tablePrefix}users", // tables
-                "{$tablePrefix}pages", // tables
-                "{$tablePrefix}nature", // tables
-                "{$tablePrefix}triples", // tables
-                "{$tablePrefix}acls", // tables
-                "{$tablePrefix}links", // tables
-                "{$tablePrefix}referrers", // tables
-            ], // args
-            "", // subfolder
-            ('\\' === DIRECTORY_SEPARATOR ? ["c:\\xampp\\mysql\\bin\\"] : []), // extraDirsWhereSearch
-            60 // timeoutInSec
-        );
+        $resultFile = $privatePath.self::SQL_FILENAME_IN_PRIVATE_FOLDER_IN_ZIP;
+        try {
+            $results = $this->consoleService->startConsoleSync('archive:exportdb', [
+                "--filepath=$resultFile"
+            ]);
+            if (!empty($results)) {
+                $result = $results[array_key_first($results)];
+                if (!empty($result['stderr']) || empty($result['stdout'])) {
+                    throw new Exception("SQL not exported");
+                }
+            }
+        } catch (Throwable $th) {
+            if (file_exists($resultFile)) {
+                unlink($resultFile);
+            }
+            throw $th;
+        }
 
         // get content
         if (file_exists($resultFile)) {
@@ -1077,38 +1081,7 @@ class ArchiveService
         if (empty($sqlContent)) {
             throw new Exception("SQL not exported");
         }
-        if (!empty($results)) {
-            // it could be occur an error
-            // throw new Exception("Error when exporting SQL :".implode(',',array_map(function ($result){return $result['stderr'] ?? '';},$results)));
-        }
         return $sqlContent;
-    }
-
-    /**
-     * assert param is a not empty string
-     * @param string $name
-     * @param mixed $param
-     * @throws Exception
-     */
-    protected function assertParamIsNotEmptyString(string $name, $param)
-    {
-        if (empty($param)) {
-            throw new Exception("'$name' should not be empty in 'wakka.config.php'");
-        }
-        $this->assertParamIsString($name, $param);
-    }
-
-    /**
-     * assert param is a string
-     * @param string $name
-     * @param mixed $param
-     * @throws Exception
-     */
-    protected function assertParamIsString(string $name, $param)
-    {
-        if (!is_string($param)) {
-            throw new Exception("'$name' should be a string in 'wakka.config.php'");
-        }
     }
 
     /**
@@ -1171,6 +1144,16 @@ class ArchiveService
         }
     }
 
+    private function getMaxNbFiles(): int
+    {
+        $archiveParams = $this->getArchiveParams();
+        return (empty($archiveParams['max_nb_files']) ||
+            !is_scalar($archiveParams['max_nb_files']) ||
+            intval($archiveParams['max_nb_files']) < 3)
+            ? 10
+            : intval($archiveParams['max_nb_files']);
+    }
+
     /**
      * extract list of archives to delete
      * @param bool $beforeArchive
@@ -1179,12 +1162,13 @@ class ArchiveService
     public function archivesToDelete(bool $beforeArchive = false): array
     {
         $archives =  $this->getArchives();
-        $nbFilesToRemove = count($archives) - self::MAX_NB_FILES + ($beforeArchive ? 1 : 0);
+        $maxNBFiles = $this->getMaxNbFiles();
+        $nbFilesToRemove = count($archives) - $maxNBFiles + ($beforeArchive ? 1 : 0);
         if ($nbFilesToRemove > 0) {
             // there are files to remove
             // keep at least one file more than 1 day and other more than 2 days to prevent
             // full deletion if attack on api
-            $indexesToRemove = range(self::MAX_NB_FILES, count($archives)-1);
+            $indexesToRemove = range($maxNBFiles, count($archives)-1);
             if (!empty($indexesToRemove)) {
                 $archivesIndexesMoreThan2days = $this->getIndexesMoreThanxdays($archives, 2);
                 $archivesIndexesMoreThan1day = $this->getIndexesMoreThanxdays($archives, 1);

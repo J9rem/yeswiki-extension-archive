@@ -15,10 +15,12 @@ parameters:
       api_allowed_keys: []
     authorize_bypass_preupdate_backup: false
     call_archive_async: true
+    max_nb_files: 10
   archive_editable_config_params:
     - archive:
       - privatePath
       - call_archive_async
+      - max_nb_files
 services:
   _defaults:
     autowire: true

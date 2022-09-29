@@ -11,6 +11,7 @@
 
 namespace YesWiki\Archive\Service;
 
+use Exception;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Symfony\Component\Process\Exception\ProcessFailedException;
 use Symfony\Component\Process\ExecutableFinder;
@@ -116,7 +117,7 @@ class ConsoleService
         $process->start();
         return $process;
     }
-    
+
     /**
      * @param string $command
      * @param array $args
@@ -147,7 +148,7 @@ class ConsoleService
     {
         $executable = $this->findExecutable($executableName, $extraDirsWhereSearch);
         if (empty($executable)) {
-            throw new Exception("Excutable \"$executableName\" not found !");
+            throw new Exception("Executable \"$executableName\" not found !");
         }
         return $this->startRawCommandAsync($executable, $args, $subfolder, $newConsole, $timeoutInSec);
     }

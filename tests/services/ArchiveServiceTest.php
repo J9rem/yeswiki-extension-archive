@@ -24,7 +24,6 @@ require_once 'tests/YesWikiTestCase.php';
 
 class ArchiveServiceTest extends YesWikiTestCase
 {
-    
     /**
      * @covers ArchiveService::__construct
      * @return array ['wiki'=> $wiki,'archiveService' => $archiveService]
@@ -36,7 +35,7 @@ class ArchiveServiceTest extends YesWikiTestCase
         return ['wiki' => $wiki,'archiveService' => $wiki->services->get(ArchiveService::class)];
     }
 
-    
+
     /**
      * @depends testArchiveServiceExisting
      * @dataProvider archiveProvider
@@ -87,7 +86,7 @@ class ArchiveServiceTest extends YesWikiTestCase
             }
         }
     }
-    
+
     public function archiveProvider()
     {
         return [
@@ -176,7 +175,7 @@ class ArchiveServiceTest extends YesWikiTestCase
             if (!preg_match("/^.*\.zip$/", $location)) {
                 $data['error'] = "\"\$location\" (\"$location\") is not a zip file !";
             } else {
-                $zip = new ZipArchive;
+                $zip = new ZipArchive();
                 if ($zip->open($location) !== true) {
                     $data['error'] = "\"\$location\" (\"$location\") is not openable !";
                 } else {
@@ -269,7 +268,7 @@ class ArchiveServiceTest extends YesWikiTestCase
             $this->assertEquals($contentDefinition, $contentToCheck);
         }
     }
-    
+
     /**
      * @depends testArchiveServiceExisting
      * @depends testArchive
@@ -320,7 +319,7 @@ class ArchiveServiceTest extends YesWikiTestCase
         unset($config['wiki_status']);
         $configurationService->write($config);
     }
-    
+
     public function notInParallelProvider()
     {
         return [
@@ -329,7 +328,7 @@ class ArchiveServiceTest extends YesWikiTestCase
             'updating' => ['status' => 'updating'],
         ];
     }
-    
+
     /**
      * @depends testArchiveServiceExisting
      * @depends testArchive
@@ -355,12 +354,12 @@ class ArchiveServiceTest extends YesWikiTestCase
             "-e","wakka.config.php"
         ];
 
-        $previousAnonymousParams = $this->getAnonymousParam($configService);
+        $previousAnonymousParams = $this->getHideConfigValuesParam($configService);
         if ($paramsFromWakka) {
             if (is_null($anonymousParam)) {
-                $this->unsetAnonymousParam($configService);
+                $this->unsetHideConfigValuesParam($configService);
             } else {
-                $this->setAnonymousParam($configService, $anonymousParam);
+                $this->setHideConfigValuesParam($configService, $anonymousParam);
             }
         } else {
             $consoleParams[] = "-a";
@@ -368,9 +367,9 @@ class ArchiveServiceTest extends YesWikiTestCase
         }
         $results = $consoleService->startConsoleSync("archive:archive", $consoleParams);
         if (!is_null($previousAnonymousParams)) {
-            $this->setAnonymousParam($configService, $previousAnonymousParams);
+            $this->setHideConfigValuesParam($configService, $previousAnonymousParams);
         } else {
-            $this->unsetAnonymousParam($configService);
+            $this->unsetHideConfigValuesParam($configService);
         }
 
         $location = null;
@@ -382,7 +381,7 @@ class ArchiveServiceTest extends YesWikiTestCase
                 break;
             }
         }
-        
+
         $this->assertNotEmpty($location, "Bad format of stdout");
         $this->assertTrue(is_file($location), "Extracted location is not a file !");
         $data = $this->getDataFromLocation($location, $services['wiki']);
@@ -393,31 +392,31 @@ class ArchiveServiceTest extends YesWikiTestCase
         $this->checkWakkaContent($wakkaContent, $data['wakkaContent']);
     }
 
-    protected function getAnonymousParam(ConfigurationService $configurationService): ?array
+    protected function getHideConfigValuesParam(ConfigurationService $configurationService): ?array
     {
         $config = $configurationService->getConfiguration('wakka.config.php');
         $config->load();
         $archiveParams = $config['archive'] ?? [];
-        return $archiveParams['anonymous'] ?? null;
+        return $archiveParams['hideConfigValues'] ?? null;
     }
 
-    protected function setAnonymousParam(ConfigurationService $configurationService, array $anonymousParam)
+    protected function setHideConfigValuesParam(ConfigurationService $configurationService, array $anonymousParam)
     {
         $config = $configurationService->getConfiguration('wakka.config.php');
         $config->load();
         $archiveParams = $config['archive'] ?? [];
-        $archiveParams['anonymous'] = $anonymousParam;
+        $archiveParams['hideConfigValues'] = $anonymousParam;
         $config['archive'] = $archiveParams;
         $configurationService->write($config);
     }
 
-    protected function unsetAnonymousParam(ConfigurationService $configurationService)
+    protected function unsetHideConfigValuesParam(ConfigurationService $configurationService)
     {
         $config = $configurationService->getConfiguration('wakka.config.php');
         $config->load();
         if (isset($config['archive'])) {
             $archiveParams = $config['archive'];
-            unset($archiveParams['anonymous']);
+            unset($archiveParams['hideConfigValues']);
             if (empty($archiveParams)) {
                 unset($config['archive']);
             } else {
@@ -439,7 +438,7 @@ class ArchiveServiceTest extends YesWikiTestCase
                     'mysql_user' => '',
                     'mysql_password' => '',
                     'archive' => [
-                        'anonymous' => [
+                        'hideConfigValues' => [
                             'mysql_host' => '',
                             'mysql_database' => '',
                             'mysql_user' => '',
@@ -467,7 +466,7 @@ class ArchiveServiceTest extends YesWikiTestCase
                     'mysql_user' => '',
                     'mysql_password' => '',
                     'archive' => [
-                        'anonymous' => [
+                        'hideConfigValues' => [
                             'mysql_host' => '',
                             'mysql_database' => '',
                             'mysql_user' => '',
@@ -493,7 +492,7 @@ class ArchiveServiceTest extends YesWikiTestCase
                     'mysql_user' => '',
                     'mysql_password' => '',
                     'archive' => [
-                        'anonymous' => [
+                        'hideConfigValues' => [
                             'mysql_host' => '',
                             'mysql_database' => '',
                             'mysql_user' => '',
