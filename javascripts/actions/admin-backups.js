@@ -467,7 +467,7 @@ let appParams = {
             return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
         },
         downloadUrl: function(archive){
-            return wiki.url(`api/archives/${archive.filename}`);
+            return wiki.url(`?api/archives/${archive.filename}`);
         },
         updateType: function (){
             if (this.$refs.adminBackupsTypeFull.checked){
