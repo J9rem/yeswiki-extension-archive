@@ -22,6 +22,7 @@ use YesWiki\Archive\Entity\ConfigurationFile;
 use YesWiki\Archive\Exception\StopArchiveException;
 use YesWiki\Archive\Service\ConfigurationService;
 use YesWiki\Archive\Service\ConsoleService;
+use YesWiki\Core\Service\DbService;
 use YesWiki\Wiki;
 use Throwable;
 use ZipArchive;
@@ -65,6 +66,7 @@ class ArchiveService
         " - On Apache server, check that the file `.htaccess` is taken in count.\n".
         " - On Nginx server or other, configure the server to **deny all** access on this folder\n";
 
+    protected $dbService;
     protected $configurationService;
     protected $consoleService;
     protected $params;
@@ -72,12 +74,14 @@ class ArchiveService
     protected $wiki;
 
     public function __construct(
+        DbService $dbService,
         ConfigurationService $configurationService,
         ConsoleService $consoleService,
         ParameterBagInterface $params,
         SecurityController $securityController,
         Wiki $wiki
     ) {
+        $this->dbService = $dbService;
         $this->configurationService = $configurationService;
         $this->consoleService = $consoleService;
         $this->params = $params;
@@ -347,7 +351,17 @@ class ArchiveService
         } catch (Throwable $th) {
             $enoughSpace = false;
         }
-        $canArchive = (!$archiving && !$hibernated && $privatePathWritable && $notAvailableOnTheInternet && (!$callAsync || $canExec) && $dB && $enoughSpace);
+        $canArchive = (
+            !$archiving &&
+            !$hibernated &&
+            $privatePathWritable &&
+            $notAvailableOnTheInternet &&
+            (
+                !$callAsync ||
+                ($canExec && $dB)
+            ) &&
+            $enoughSpace
+        );
         return compact(['canArchive','archiving','hibernated','privatePathWritable','canExec','callAsync','notAvailableOnTheInternet','enoughSpace','dB']);
     }
 
@@ -1057,13 +1071,22 @@ class ArchiveService
     {
         $resultFile = $privatePath.self::SQL_FILENAME_IN_PRIVATE_FOLDER_IN_ZIP;
         try {
-            $results = $this->consoleService->startConsoleSync('archive:exportdb', [
-                "--filepath=$resultFile"
-            ]);
-            if (!empty($results)) {
-                $result = $results[array_key_first($results)];
-                if (!empty($result['stderr']) || empty($result['stdout'])) {
-                    throw new Exception("SQL not exported");
+            if ($this->testDb()) {
+                $results = $this->consoleService->startConsoleSync('archive:exportdb', [
+                    "--filepath=$resultFile"
+                ]);
+                if (!empty($results)) {
+                    $result = $results[array_key_first($results)];
+                    if (!empty($result['stderr']) || empty($result['stdout'])) {
+                        throw new Exception("SQL not exported");
+                    }
+                }
+            } else {
+                $results = $this->getSQLContentBackupMethod();
+                if (empty($results['sql'])) {
+                    throw new Exception(empty($results['error']) ? "SQL not exported" : $results['error']);
+                } else {
+                    return $results['sql'];
                 }
             }
         } catch (Throwable $th) {
@@ -1352,5 +1375,158 @@ class ArchiveService
         }
 
         return compact(['running','finished','stopped','output']);
+    }
+
+    /**
+     * get SQL content : backup method ; preferer mysqldump way it available
+     * @return array ['sql' => string, 'error' => string]
+     *
+     */
+    private function getSQLContentBackupMethod(): array
+    {
+        $sql = "";
+        $error = "";
+        try {
+            $tablesPrefix = trim($this->dbService->prefixTable(''));
+            $tablesPostfix = [];
+            // get Tables
+            $tables = $this->dbService->loadAll("show tables");
+            if (!is_array($tables)) {
+                throw new Exception("Error in '".__METHOD__."' (line ".__LINE__.") : 'show tables' sql command did not return an array !");
+            }
+
+            foreach ($tables as  $tableInfo) {
+                if (!is_array($tableInfo)) {
+                    throw new Exception("Error in '".__METHOD__."' (line ".__LINE__.") : '\$tableInfo' sql command did not return an array !");
+                }
+                $tableName = array_values($tableInfo)[0];
+                if (strpos($tableName, $tablesPrefix) === 0) {
+                    $tablesPostfix[] = $tableName;
+                }
+            }
+
+            // generate file
+            $date = (new \DateTime())->format('c');
+            $phpVersion = phpversion();
+
+            $sql =
+            <<<SQL
+            -- SQL Dump
+            -- ArchiveService:getSQLBackup Version
+            -- 
+            -- Generated on : $date
+            -- PHP version : $phpVersion
+
+            SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
+            SET AUTOCOMMIT = 0;
+            START TRANSACTION;
+            SET time_zone = "+00:00";
+
+            /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+            /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+            /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+            /*!40101 SET NAMES utf8mb4 */
+            
+            -- --------------------------------------------------------
+
+
+            SQL;
+
+            // For each table
+            foreach ($tablesPostfix as $tableName) {
+                // DUMP CREATE TABLE
+
+                // HEADER
+                $sql .=
+                <<<SQL
+
+                -- 
+                -- Structure of table : `$tableName`
+                -- 
+
+                SQL;
+                // END HEADER
+
+                $createTableResult = $this->dbService->query("show create table " . $tableName);
+
+                while ($creationTable = mysqli_fetch_array($createTableResult)) {
+                    $sql .= $creationTable[1].";\n\n";
+                }
+
+                // DUMP DATA
+
+                //    HEADER
+                $sql .=
+                <<<SQL
+
+                -- 
+                -- Data of table : `$tableName`
+                -- 
+
+                SQL;
+                // END HEADER
+
+                $rawData = $this->dbService->query("select * from " . $tableName);
+
+                $firstRow = true ;
+                while ($row = mysqli_fetch_array($rawData)) {
+                    if ($firstRow) {
+                        $sql .= "INSERT INTO `$tableName` ";
+                        $sql .= "(";
+                        for ($i=0; $i < mysqli_num_fields($rawData); $i++) {
+                            if ($i != 0) {
+                                $sql .=  ", ";
+                            }
+                            $sql .= "`" . mysqli_fetch_field_direct($rawData, $i)->name . "`";
+                        }
+                        $sql .= ") VALUES\n";
+                        $firstRow = false ;
+                    } else {
+                        $sql .= ",\n";
+                    }
+                    $sql .= "(";
+                    for ($i=0; $i < mysqli_num_fields($rawData); $i++) {
+                        if ($i != 0) {
+                            $sql .=  ", ";
+                        }
+                        $strAdd = '';
+                        $field = mysqli_fetch_field_direct($rawData, $i);
+                        if ($field->type == 252 // text or blob cf https://www.php.net/manual/fr/mysqli-result.fetch-field-direct.php
+                            || $field->type == 253 // varchar
+                            || $field->type == 254 // char
+                            || $field->type == 10 // date
+                            || $field->type == 11 // time
+                            || $field->type == 12 // datetime
+                            || $field->type == 13 // year
+                        ) {
+                            $strAdd =  "'";
+                        }
+                        $sql .=  $strAdd . $this->dbService->escape($row[$i] ?? '') . $strAdd ;
+                    }
+                    $sql .=  ")";
+                }
+                $sql .= ";\n" ;
+                $sql .=
+                <<<SQL
+
+                -- --------------------------------------------------------
+
+                SQL;
+            }
+
+            $sql .=
+            <<<SQL
+
+            COMMIT;
+            
+            /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+            /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+            /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+
+            SQL;
+        } catch (Throwable $th) {
+            $error = $th->getMessage();
+        }
+        return compact(['sql','error']);
     }
 }
