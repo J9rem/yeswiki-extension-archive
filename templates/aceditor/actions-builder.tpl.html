@@ -8,20 +8,11 @@
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
- use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
+use YesWiki\Aceditor\Service\ActionsBuilderService;
 
- $params = $this->wiki->services->get(ParameterBagInterface::class);
-if ($params->get("yeswiki_version") == "doryphore" &&
-    preg_match("/^4\.2\.(?:[4-9]|[1-9][0-9])$/", $params->get("yeswiki_release"))){
-    if(isset($data) &&
-        isset($data['action_groups']) &&
-        isset($data['action_groups']['management']) &&
-        isset($data['action_groups']['management']['actions'])) {
-        $data['action_groups']['management']['actions']['adminbackups'] = [
-            'label' => _t('AB_management_adminbackups_label')
-        ];
-    }
-}
+$actionsBuilderService = $this->wiki->services->get(ActionsBuilderService::class);
+$actionsBuilderService->setPreviousData($data ?? null);
+$data = $actionsBuilderService->getData();
 
 $paths = $this->twigLoader->getPaths("aceditor");
 $curExtDirName = basename(dirname(dirname(dirname(__FILE__))));
